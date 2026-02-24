@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kanban SSOT Dashboard</title>
+  <style>
+    :root { font-family: Arial, sans-serif; }
+    body { margin: 20px; background: #f8fafc; color: #111827; }
+    h1 { margin-bottom: 8px; }
+    .toolbar { margin-bottom: 12px; display:flex; gap:8px; flex-wrap:wrap; }
+    button { padding: 6px 10px; border: 0; border-radius: 8px; background: #1d4ed8; color: white; cursor: pointer; }
+    .layout { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .column { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 8px; min-height: 320px; }
+    .column h3 { margin: 4px 0 8px; font-size: 14px; }
+    .card { background: #f3f4f6; border-radius: 10px; padding: 8px; margin-bottom: 8px; font-size: 13px; }
+    .meta { color: #6b7280; font-size: 12px; }
+    pre { white-space: pre-wrap; font-size: 11px; }
+    .row { display:flex; gap:6px; align-items:center; }
+  </style>
+</head>
+<body>
+  <h1>Kanban SSOT Dashboard</h1>
+  <div class="toolbar">
+    <button onclick="load()">새로고침</button>
+    <button onclick="seed()">샘플 Task 생성</button>
+    <button onclick="runOrchestrator()">Orchestrator 1회 실행</button>
+    <span id="status"></span>
+  </div>
+  <div class="layout" id="dashboard"></div>
+
+  <script>
+    const statuses = ['Backlog','Ready','InProgress','InReview','Blocked','Done','Archived'];
+
+    async function api(path, options={}) {
+      const res = await fetch(`http://localhost:4100${path}`, options);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'request failed');
+      return data;
+    }
+
+    async function load() {
+      const statusEl = document.getElementById('status');
+      try {
+        const tasks = await api('/api/tasks');
+        const agents = await api('/api/agents');
+        const audits = await api('/api/audit?limit=15');
+        const blocked = await api('/api/blockeds');
+
+        const cols = Object.fromEntries(statuses.map(s => [s, []]));
+        tasks.forEach(t => cols[t.status]?.push(t));
+
+        const dashboard = document.getElementById('dashboard');
+        dashboard.innerHTML = '';
+        statuses.forEach(status => {
+          const col = document.createElement('section');
+          col.className = 'column';
+          col.innerHTML = `<h3>${status}</h3>`;
+          cols[status].forEach(t => {
+            const card = document.createElement('article');
+            card.className = 'card';
+            card.innerHTML = `<div><strong>${t.id}</strong> - ${t.title}</div>
+              <div class="meta">${t.type} | priority ${Number(t.priorityScore || 0).toFixed(1)} | attempt ${t.attemptCount || 0}/${t.maxAttempt || 3}</div>
+              <div class="meta">assignee: ${t.assigneeAgentId || '-'}</div>`;
+            col.appendChild(card);
+          });
+          dashboard.appendChild(col);
+        });
+
+        // agents panel
+        const agentCol = document.createElement('section');
+        agentCol.className = 'column';
+        agentCol.innerHTML = '<h3>Agents</h3>' + agents.map(a => `<div class="card"><div><strong>${a.id}</strong> (${a.role})</div><div class="meta">${a.name}</div></div>`).join('');
+        dashboard.appendChild(agentCol);
+
+        // blocked panel
+        const blockCol = document.createElement('section');
+        blockCol.className = 'column';
+        blockCol.innerHTML = '<h3>Blocked</h3>' + (blocked.length ? blocked.map(b => `<div class="card"><div><strong>${b.id}</strong></div><div class="meta">${b.title}</div></div>`).join('') : '<div class="meta">0건</div>');
+        dashboard.appendChild(blockCol);
+
+        // audit panel
+        const auditCol = document.createElement('section');
+        auditCol.className = 'column';
+        auditCol.innerHTML = '<h3>Audit (last 15)</h3>' + (audits.length ? audits.map(a => `<div class="card"><div><strong>${a.action}</strong> [${a.entity}]</div><div class="meta">${a.actor_agent_id || 'system'} · ${a.entity_id}</div><div class="meta">${a.reason || ''}</div></div>`).join('') : '<div class="meta">empty</div>');
+        dashboard.appendChild(auditCol);
+
+        statusEl.textContent = `Loaded: ${tasks.length} tasks / ${blocked.length} blocked / agents ${agents.length}`;
+      } catch (error) {
+        statusEl.textContent = '연결 실패 (server 실행 필요): ' + error.message;
+      }
+    }
+
+    async function seed() {
+      await api('/api/tasks', {
+        method: 'POST',
+        headers: { 'content-type':'application/json' },
+        body: JSON.stringify({
+          title: '샘플 작업',
+          description: '요건 기반 샘플',
+          type: 'feature',
+          priorityModel: 4,
+          urgency: 4,
+          riskReduction: 4,
+          effort: 2,
+          acceptanceCriteria: ['요구사항 문서 반영'],
+          definitionOfDone: ['검증 가능한 결과물 산출'],
+          dependencies: []
+        })
+      });
+      await load();
+    }
+
+    async function runOrchestrator() {
+      await api('/api/orchestrator/run', { method: 'POST' });
+      await load();
+    }
+
+    setInterval(load, 10000);
+    load();
+  </script>
+</body>
+</html>

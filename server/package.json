@@ -1,0 +1,16 @@
+{
+  "name": "kanban-ssot-system-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node src/index.js",
+    "start": "node src/index.js",
+    "serve-web": "node src/index.js --serve-web",
+    "typecheck": "node -e \"console.log('typecheck placeholder')\""
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.0",
+    "zod": "^3.24.4"
+  }
+}
