@@ -1,10 +1,13 @@
 import Database from 'better-sqlite3';
-import { mkdirSync, existsSync } from 'node:fs';
-import { readFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { mkdirSync, existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const DEFAULT_DB_PATH = new URL('./data/kanban.db', import.meta.url).pathname;
-const schemaPath = new URL('../models/schema.sql', import.meta.url);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const DEFAULT_DB_PATH = join(__dirname, 'data', 'kanban.db');
+const schemaPath = join(__dirname, '../models/schema.sql');
 
 export function getDatabase(dbPath = process.env.KANBAN_DB_PATH || DEFAULT_DB_PATH) {
   const dir = dirname(dbPath);

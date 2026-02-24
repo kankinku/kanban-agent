@@ -66,15 +66,56 @@ export function getAgent(agentId) {
   return db.prepare('SELECT * FROM agents WHERE id = ?').get(agentId) || null;
 }
 
+export function updateAgent(agentId, input) {
+  const now = nowIso();
+  db.prepare(`UPDATE agents SET name=@name, role=@role, model=@model, prompt=@prompt,
+    tool_scope=@toolScope, is_active=@isActive, updated_at=@updatedAt WHERE id=@id`)
+    .run({
+      id: agentId,
+      name: input.name,
+      role: input.role,
+      model: input.model || null,
+      prompt: input.prompt || null,
+      toolScope: input.toolScope || null,
+      isActive: input.isActive !== false ? 1 : 0,
+      updatedAt: now
+    });
+  return getAgent(agentId);
+}
+
+export function deleteAgent(agentId) {
+  db.prepare('DELETE FROM agents WHERE id = ?').run(agentId);
+  return { deleted: agentId };
+}
+
+
 export function upsertDefaultAgents() {
   const count = db.prepare('SELECT COUNT(*) AS c FROM agents').get()?.c || 0;
   if (count > 0) return;
   const now = nowIso();
-  const stmt = db.prepare(`INSERT INTO agents (id, name, role, is_active, created_at, updated_at) VALUES (@id,@name,@role,@isActive,@createdAt,@updatedAt)`);
-  stmt.run({ id: 'worker-01', name: 'worker-01', role: 'worker', isActive: 1, createdAt: now, updatedAt: now });
-  stmt.run({ id: 'reviewer-01', name: 'reviewer-01', role: 'reviewer', isActive: 1, createdAt: now, updatedAt: now });
-  stmt.run({ id: 'manager-01', name: 'manager-01', role: 'manager', isActive: 1, createdAt: now, updatedAt: now });
+  const stmt = db.prepare(`INSERT INTO agents (id, name, role, model, prompt, is_active, created_at, updated_at) VALUES (@id,@name,@role,@model,@prompt,@isActive,@createdAt,@updatedAt)`);
+  stmt.run({
+    id: 'pm-01', name: '프로젝트 매니저', role: 'manager', model: 'gemini-2.0-flash',
+    prompt: '프로젝트 설명을 읽고 실행 가능한 작업(Task)으로 분해하여 Backlog에 등록합니다. 각 작업은 명확한 통과 기준(Acceptance Criteria)을 포함해야 합니다.',
+    isActive: 1, createdAt: now, updatedAt: now
+  });
+  stmt.run({
+    id: 'worker-01', name: 'Feature Worker', role: 'worker', model: 'codex',
+    prompt: '할당된 개발 작업을 구현하고 산출물(코드, 문서)을 제출합니다.',
+    isActive: 1, createdAt: now, updatedAt: now
+  });
+  stmt.run({
+    id: 'reviewer-01', name: 'Code Reviewer', role: 'reviewer', model: 'gemini-2.0-flash',
+    prompt: '제출된 산출물을 검토하고 통과 기준 충족 여부를 판단합니다.',
+    isActive: 1, createdAt: now, updatedAt: now
+  });
+  stmt.run({
+    id: 'manager-01', name: 'Decision Manager', role: 'manager', model: 'gpt-4o-mini',
+    prompt: '리뷰 결과를 바탕으로 작업을 완료 처리하거나 재작업을 지시합니다.',
+    isActive: 1, createdAt: now, updatedAt: now
+  });
 }
+
 
 export function createTask(input) {
   const id = input.id || makeTaskId();
@@ -234,16 +275,16 @@ export function addArtifact(input) {
   const now = nowIso();
   db.prepare(`INSERT INTO artifacts (id, task_id, kind, location, summary, repro_steps, checksum, created_by_agent_id, created_at)
     VALUES (@id, @taskId, @kind, @location, @summary, @reproSteps, @checksum, @createdByAgentId, @createdAt)`).run({
-      id,
-      taskId: input.taskId,
-      kind: input.kind || 'doc',
-      location: input.location || '',
-      summary: input.summary || '',
-      reproSteps: toJsonArray(input.reproSteps, []),
-      checksum: input.checksum || null,
-      createdByAgentId: input.createdByAgentId || 'worker-01',
-      createdAt: now
-    });
+    id,
+    taskId: input.taskId,
+    kind: input.kind || 'doc',
+    location: input.location || '',
+    summary: input.summary || '',
+    reproSteps: toJsonArray(input.reproSteps, []),
+    checksum: input.checksum || null,
+    createdByAgentId: input.createdByAgentId || 'worker-01',
+    createdAt: now
+  });
   emitEvent({ action: 'artifact_created', actorAgentId: input.createdByAgentId || 'worker-01', entity: 'Artifact', entityId: id, reason: `task=${input.taskId}` });
   return getArtifact(id);
 }
@@ -259,18 +300,18 @@ export function addReviewReport(input) {
   db.prepare(`INSERT INTO review_reports
     (id, task_id, verdict, correctness, completeness, quality, risk, reviewer_agent_id, created_at, updated_at, comments)
     VALUES (@id,@taskId,@verdict,@correctness,@completeness,@quality,@risk,@reviewerAgentId,@createdAt,@updatedAt,@comments)`).run({
-      id,
-      taskId: input.taskId,
-      verdict: input.verdict,
-      correctness: input.correctness ?? null,
-      completeness: input.completeness ?? null,
-      quality: input.quality ?? null,
-      risk: input.risk ?? null,
-      reviewerAgentId: input.reviewerAgentId || 'reviewer-01',
-      createdAt: now,
-      updatedAt: now,
-      comments: input.comments || ''
-    });
+    id,
+    taskId: input.taskId,
+    verdict: input.verdict,
+    correctness: input.correctness ?? null,
+    completeness: input.completeness ?? null,
+    quality: input.quality ?? null,
+    risk: input.risk ?? null,
+    reviewerAgentId: input.reviewerAgentId || 'reviewer-01',
+    createdAt: now,
+    updatedAt: now,
+    comments: input.comments || ''
+  });
 
   if (Array.isArray(input.issues)) {
     const issueStmt = db.prepare(`INSERT INTO review_issues (id, review_report_id, type, severity, description, created_at)

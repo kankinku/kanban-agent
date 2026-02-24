@@ -1,6 +1,7 @@
 import { isOrchestratorPaused } from './control.js';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   listTasksByStatus,
   updateTaskStatus,
@@ -11,7 +12,9 @@ import {
 } from './services/kanbanService.js';
 
 const MAX_WIP_PER_AGENT = Number(process.env.KANBAN_MAX_WIP_PER_AGENT || 2);
-const ROOT_DIR = path.resolve(new URL('..', import.meta.url).pathname);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.resolve(__dirname, '..');
 const WORKER_AGENT_ID = process.env.KANBAN_WORKER_AGENT_ID || 'worker-01';
 const REVIEWER_AGENT_ID = process.env.KANBAN_REVIEWER_AGENT_ID || 'reviewer-01';
 const MANAGER_AGENT_ID = process.env.KANBAN_MANAGER_AGENT_ID || 'manager-01';

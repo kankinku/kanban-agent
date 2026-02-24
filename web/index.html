@@ -1,123 +1,1748 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" data-theme="light">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Kanban SSOT Dashboard</title>
+  <link rel="stylesheet" as="style" crossorigin
+    href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
   <style>
-    :root { font-family: Arial, sans-serif; }
-    body { margin: 20px; background: #f8fafc; color: #111827; }
-    h1 { margin-bottom: 8px; }
-    .toolbar { margin-bottom: 12px; display:flex; gap:8px; flex-wrap:wrap; }
-    button { padding: 6px 10px; border: 0; border-radius: 8px; background: #1d4ed8; color: white; cursor: pointer; }
-    .layout { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-    .column { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 8px; min-height: 320px; }
-    .column h3 { margin: 4px 0 8px; font-size: 14px; }
-    .card { background: #f3f4f6; border-radius: 10px; padding: 8px; margin-bottom: 8px; font-size: 13px; }
-    .meta { color: #6b7280; font-size: 12px; }
-    pre { white-space: pre-wrap; font-size: 11px; }
-    .row { display:flex; gap:6px; align-items:center; }
-  </style>
-</head>
-<body>
-  <h1>Kanban SSOT Dashboard</h1>
-  <div class="toolbar">
-    <button onclick="load()">새로고침</button>
-    <button onclick="seed()">샘플 Task 생성</button>
-    <button onclick="runOrchestrator()">Orchestrator 1회 실행</button>
-    <span id="status"></span>
-  </div>
-  <div class="layout" id="dashboard"></div>
-
-  <script>
-    const statuses = ['Backlog','Ready','InProgress','InReview','Blocked','Done','Archived'];
-
-    async function api(path, options={}) {
-      const res = await fetch(`http://localhost:4100${path}`, options);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'request failed');
-      return data;
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
 
-    async function load() {
-      const statusEl = document.getElementById('status');
-      try {
-        const tasks = await api('/api/tasks');
-        const agents = await api('/api/agents');
-        const audits = await api('/api/audit?limit=15');
-        const blocked = await api('/api/blockeds');
+    :root {
+      --bg-main: #f2f4f6;
+      --bg-card: #ffffff;
+      --bg-sidebar: #ffffff;
+      --bg-header: rgba(255, 255, 255, 0.88);
+      --border: #e5e8eb;
+      --text-primary: #191f28;
+      --text-secondary: #4e5968;
+      --text-tertiary: #8b95a1;
+      --brand: #3182f6;
+      --brand-bg: #e8f3ff;
+      --brand-hover: #1b64da;
+      --green: #37c87c;
+      --green-bg: rgba(55, 200, 124, .12);
+      --red: #f04452;
+      --red-bg: rgba(240, 68, 82, .12);
+      --yellow: #f5b102;
+      --yellow-bg: rgba(245, 177, 2, .12);
+      --orange: #ff8a3d;
+      --orange-bg: rgba(255, 138, 61, .12);
+      --purple: #7c3aed;
+      --purple-bg: rgba(124, 58, 237, .12);
+      --cyan: #06b6d4;
+      --cyan-bg: rgba(6, 182, 212, .12);
+      --r-lg: 20px;
+      --r-md: 14px;
+      --r-sm: 10px;
+      --r-xs: 7px;
+      --sh: 0 2px 12px rgba(0, 0, 0, .04);
+      --sh-md: 0 8px 28px rgba(0, 0, 0, .08);
+      --t: all 0.2s ease;
+    }
 
-        const cols = Object.fromEntries(statuses.map(s => [s, []]));
-        tasks.forEach(t => cols[t.status]?.push(t));
+    [data-theme="dark"] {
+      --bg-main: #111111;
+      --bg-card: #1c1c1c;
+      --bg-sidebar: #181818;
+      --bg-header: rgba(24, 24, 24, .92);
+      --border: #2a2a2a;
+      --text-primary: #f1f3f5;
+      --text-secondary: #a8b0bb;
+      --text-tertiary: #636d79;
+      --brand: #5096fa;
+      --brand-bg: rgba(80, 150, 250, .14);
+      --brand-hover: #6aa5fb;
+      --green: #3dcb82;
+      --green-bg: rgba(61, 203, 130, .12);
+      --red: #f16672;
+      --red-bg: rgba(241, 102, 114, .12);
+      --yellow: #f7c325;
+      --yellow-bg: rgba(247, 195, 37, .12);
+      --sh: 0 4px 16px rgba(0, 0, 0, .25);
+      --sh-md: 0 12px 40px rgba(0, 0, 0, .45);
+    }
 
-        const dashboard = document.getElementById('dashboard');
-        dashboard.innerHTML = '';
-        statuses.forEach(status => {
-          const col = document.createElement('section');
-          col.className = 'column';
-          col.innerHTML = `<h3>${status}</h3>`;
-          cols[status].forEach(t => {
-            const card = document.createElement('article');
-            card.className = 'card';
-            card.innerHTML = `<div><strong>${t.id}</strong> - ${t.title}</div>
-              <div class="meta">${t.type} | priority ${Number(t.priorityScore || 0).toFixed(1)} | attempt ${t.attemptCount || 0}/${t.maxAttempt || 3}</div>
-              <div class="meta">assignee: ${t.assigneeAgentId || '-'}</div>`;
-            col.appendChild(card);
-          });
-          dashboard.appendChild(col);
-        });
+    html,
+    body {
+      height: 100%;
+    }
 
-        // agents panel
-        const agentCol = document.createElement('section');
-        agentCol.className = 'column';
-        agentCol.innerHTML = '<h3>Agents</h3>' + agents.map(a => `<div class="card"><div><strong>${a.id}</strong> (${a.role})</div><div class="meta">${a.name}</div></div>`).join('');
-        dashboard.appendChild(agentCol);
+    body {
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg-main);
+      color: var(--text-primary);
+      display: flex;
+      letter-spacing: -0.01em;
+      transition: background .3s, color .3s;
+    }
 
-        // blocked panel
-        const blockCol = document.createElement('section');
-        blockCol.className = 'column';
-        blockCol.innerHTML = '<h3>Blocked</h3>' + (blocked.length ? blocked.map(b => `<div class="card"><div><strong>${b.id}</strong></div><div class="meta">${b.title}</div></div>`).join('') : '<div class="meta">0건</div>');
-        dashboard.appendChild(blockCol);
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
 
-        // audit panel
-        const auditCol = document.createElement('section');
-        auditCol.className = 'column';
-        auditCol.innerHTML = '<h3>Audit (last 15)</h3>' + (audits.length ? audits.map(a => `<div class="card"><div><strong>${a.action}</strong> [${a.entity}]</div><div class="meta">${a.actor_agent_id || 'system'} · ${a.entity_id}</div><div class="meta">${a.reason || ''}</div></div>`).join('') : '<div class="meta">empty</div>');
-        dashboard.appendChild(auditCol);
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
 
-        statusEl.textContent = `Loaded: ${tasks.length} tasks / ${blocked.length} blocked / agents ${agents.length}`;
-      } catch (error) {
-        statusEl.textContent = '연결 실패 (server 실행 필요): ' + error.message;
+    /* ─── Sidebar ─── */
+    aside {
+      width: 220px;
+      flex-shrink: 0;
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      transition: background .3s, border-color .3s;
+    }
+
+    .logo {
+      padding: 22px 20px 18px;
+    }
+
+    .logo h1 {
+      font-size: 18px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .logo h1 .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--brand);
+    }
+
+    .logo span {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-top: 3px;
+      display: block;
+    }
+
+    nav {
+      flex: 1;
+      padding: 8px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: var(--r-sm);
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 14px;
+      font-weight: 600;
+      transition: var(--t);
+      margin-bottom: 2px;
+    }
+
+    .nav-item:hover {
+      background: var(--bg-main);
+      color: var(--text-primary);
+    }
+
+    .nav-item.active {
+      background: var(--brand-bg);
+      color: var(--brand);
+    }
+
+    .nav-item svg {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+
+    .sidebar-footer {
+      padding: 16px 18px;
+      border-top: 1px solid var(--border);
+    }
+
+    .srv-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      display: inline-block;
+    }
+
+    .srv-dot.off {
+      background: var(--red);
+    }
+
+    #srvLabel {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-tertiary);
+      margin-left: 7px;
+    }
+
+    /* ─── Main ─── */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ─── Topbar ─── */
+    .topbar {
+      height: 60px;
+      padding: 0 28px;
+      background: var(--bg-header);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 80;
+      transition: background .3s, border-color .3s;
+    }
+
+    .topbar h2 {
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .orch-badge {
+      font-size: 12px;
+      font-weight: 700;
+      padding: 5px 12px;
+      border-radius: 20px;
+      background: var(--green-bg);
+      color: var(--green);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .orch-badge.paused {
+      background: var(--yellow-bg);
+      color: var(--yellow);
+    }
+
+    .orch-badge::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    /* ─── Buttons ─── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 9px 15px;
+      border-radius: var(--r-sm);
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: var(--t);
+    }
+
+    .btn:hover {
+      background: var(--bg-main);
+      color: var(--text-primary);
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+    }
+
+    .btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .btn-primary {
+      background: var(--brand);
+      color: #fff;
+      border: none;
+    }
+
+    .btn-primary:hover {
+      background: var(--brand-hover);
+      color: #fff;
+    }
+
+    .btn-success {
+      background: var(--green);
+      color: #fff;
+      border: none;
+    }
+
+    .btn-success:hover {
+      filter: brightness(0.9);
+    }
+
+    .btn-danger {
+      background: var(--red-bg);
+      color: var(--red);
+      border: none;
+    }
+
+    .btn-danger:hover {
+      background: var(--red);
+      color: #fff;
+    }
+
+    .btn-sm {
+      padding: 6px 11px;
+      font-size: 12px;
+    }
+
+    .btn-icon {
+      padding: 8px;
+      border-radius: 50%;
+      width: 38px;
+      height: 38px;
+      border: none;
+      background: transparent;
+      box-shadow: none;
+      color: var(--text-secondary);
+    }
+
+    .btn-icon:hover {
+      background: var(--bg-main);
+    }
+
+    /* ─── Content ─── */
+    .content {
+      padding: 24px 28px;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .view {
+      display: none;
+    }
+
+    .view.active {
+      display: block;
+    }
+
+    /* ─── Stats row ─── */
+    .stats {
+      display: flex;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .stat {
+      flex: 1;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 20px 22px;
+      box-shadow: var(--sh);
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+    }
+
+    .stat-val {
+      font-size: 30px;
+      font-weight: 800;
+      margin-top: 6px;
+    }
+
+    /* ─── Board ─── */
+    .board {
+      display: flex;
+      gap: 16px;
+      overflow-x: auto;
+      align-items: flex-start;
+      padding-bottom: 8px;
+    }
+
+    .col {
+      flex: 0 0 280px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      box-shadow: var(--sh);
+      display: flex;
+      flex-direction: column;
+      max-height: calc(100vh - 330px);
+    }
+
+    .col-head {
+      padding: 16px 18px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .col-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--text-tertiary);
+      flex-shrink: 0;
+    }
+
+    .col[data-s="Ready"] .col-dot {
+      background: var(--brand);
+    }
+
+    .col[data-s="InProgress"] .col-dot {
+      background: var(--yellow);
+    }
+
+    .col[data-s="InReview"] .col-dot {
+      background: var(--orange);
+    }
+
+    .col[data-s="Blocked"] .col-dot {
+      background: var(--red);
+    }
+
+    .col[data-s="Done"] .col-dot {
+      background: var(--green);
+    }
+
+    .col-title {
+      font-size: 13px;
+      font-weight: 700;
+      flex: 1;
+    }
+
+    .col-cnt {
+      font-size: 12px;
+      font-weight: 600;
+      background: var(--bg-main);
+      color: var(--text-tertiary);
+      padding: 2px 9px;
+      border-radius: 12px;
+    }
+
+    .col-body {
+      padding: 12px;
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    /* ─── Task Card ─── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: var(--t);
+    }
+
+    .card:hover {
+      border-color: var(--brand);
+      transform: translateY(-1px);
+      box-shadow: var(--sh);
+    }
+
+    .card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .card-id {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--brand);
+    }
+
+    .p-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 5px;
+    }
+
+    .p-high {
+      background: var(--red-bg);
+      color: var(--red);
+    }
+
+    .p-mid {
+      background: var(--yellow-bg);
+      color: var(--yellow);
+    }
+
+    .p-low {
+      background: var(--green-bg);
+      color: var(--green);
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.4;
+      margin-bottom: 10px;
+    }
+
+    .card-meta {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .tag {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 6px;
+      background: var(--bg-main);
+      color: var(--text-secondary);
+    }
+
+    .tag-agent {
+      background: var(--purple-bg);
+      color: var(--purple);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .tag-review {
+      background: var(--orange-bg);
+      color: var(--orange);
+    }
+
+    .tag-done-r {
+      background: var(--green-bg);
+      color: var(--green);
+    }
+
+    /* ─── Agent Panel (Board bottom) ─── */
+    .agent-section {
+      margin-top: 28px;
+    }
+
+    .section-hd {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .section-hd h3 {
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .agent-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 14px;
+    }
+
+    .agent-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 18px 20px;
+      box-shadow: var(--sh);
+      transition: var(--t);
+    }
+
+    .agent-card:hover {
+      border-color: var(--brand);
+    }
+
+    .agent-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .agent-avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+
+    .role-worker {
+      background: var(--brand-bg);
+      color: var(--brand);
+    }
+
+    .role-reviewer {
+      background: var(--yellow-bg);
+      color: var(--yellow);
+    }
+
+    .role-manager {
+      background: var(--green-bg);
+      color: var(--green);
+    }
+
+    .agent-name {
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .agent-role {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    .agent-model {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+    }
+
+    .agent-task {
+      font-size: 12px;
+      padding: 7px 10px;
+      background: var(--bg-main);
+      border-radius: var(--r-xs);
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+    }
+
+    .agent-actions {
+      display: flex;
+      gap: 7px;
+    }
+
+    /* ─── Provider Panel ─── */
+    .provider-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .prov-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 20px 22px;
+      margin-bottom: 14px;
+      box-shadow: var(--sh);
+    }
+
+    .prov-head {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .prov-icon {
+      width: 46px;
+      height: 46px;
+      border-radius: var(--r-md);
+      background: var(--bg-main);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 900;
+      flex-shrink: 0;
+    }
+
+    .prov-info {
+      flex: 1;
+    }
+
+    .prov-name {
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .prov-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 3px;
+    }
+
+    .prov-badge {
+      font-size: 12px;
+      font-weight: 700;
+      padding: 5px 14px;
+      border-radius: 20px;
+    }
+
+    .prov-badge.ok {
+      background: var(--green-bg);
+      color: var(--green);
+    }
+
+    .prov-badge.no {
+      background: var(--red-bg);
+      color: var(--red);
+    }
+
+    .prov-body {
+      background: var(--bg-main);
+      border-radius: var(--r-sm);
+      padding: 16px;
+    }
+
+    .prov-body .row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .prov-note {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .prov-note code {
+      background: var(--border);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+
+    .prov-test-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 10px;
+    }
+
+    /* ─── Audit ─── */
+    .audit-item {
+      display: flex;
+      gap: 14px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .audit-item:last-child {
+      border-bottom: none;
+    }
+
+    .audit-line {
+      width: 3px;
+      border-radius: 2px;
+      background: var(--border);
+      flex-shrink: 0;
+      align-self: stretch;
+    }
+
+    .audit-action {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .audit-meta {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 3px;
+    }
+
+    .audit-time {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      margin-top: 4px;
+    }
+
+    .audit-reason {
+      margin-top: 8px;
+      font-size: 12px;
+      background: var(--bg-main);
+      padding: 8px 12px;
+      border-radius: var(--r-xs);
+      color: var(--text-secondary);
+    }
+
+    /* ─── Panels ─── */
+    .panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      box-shadow: var(--sh);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .panel-head h3 {
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .panel-body {
+      padding: 20px 24px;
+      max-height: 600px;
+      overflow-y: auto;
+    }
+
+    /* ─── Form ─── */
+    .inp {
+      width: 100%;
+      padding: 11px 14px;
+      border-radius: var(--r-sm);
+      border: 1px solid var(--border);
+      background: var(--bg-main);
+      color: var(--text-primary);
+      font-size: 14px;
+      font-family: inherit;
+      transition: var(--t);
+    }
+
+    .inp:focus {
+      outline: none;
+      border-color: var(--brand);
+      background: var(--bg-card);
+      box-shadow: 0 0 0 3px var(--brand-bg);
+    }
+
+    select.inp {
+      cursor: pointer;
+    }
+
+    label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .form-row {
+      display: flex;
+      gap: 12px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+      margin-bottom: 14px;
+    }
+
+    /* ─── Modal ─── */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .45);
+      backdrop-filter: blur(8px);
+      z-index: 200;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .overlay.show {
+      display: flex;
+    }
+
+    .modal {
+      background: var(--bg-card);
+      width: 540px;
+      max-width: 92vw;
+      border-radius: var(--r-lg);
+      box-shadow: var(--sh-md);
+      display: flex;
+      flex-direction: column;
+      max-height: 88vh;
+      animation: up .28s cubic-bezier(.16, 1, .3, 1);
+    }
+
+    @keyframes up {
+      from {
+        transform: translateY(24px);
+        opacity: 0;
+      }
+
+      to {
+        transform: none;
+        opacity: 1;
       }
     }
 
-    async function seed() {
-      await api('/api/tasks', {
+    .modal-head {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-head h3 {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .modal-x {
+      background: var(--bg-main);
+      border: none;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-x:hover {
+      background: var(--border);
+    }
+
+    .modal-body {
+      padding: 22px 24px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .modal-foot {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    /* ─── Agent detail rows ─── */
+    .detail-row {
+      display: flex;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .detail-row:last-child {
+      border-bottom: none;
+    }
+
+    .d-label {
+      width: 130px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-tertiary);
+    }
+
+    .d-val {
+      flex: 1;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .page-head {
+      margin-bottom: 22px;
+    }
+
+    .page-head h2 {
+      font-size: 22px;
+      font-weight: 800;
+    }
+
+    .page-head p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-top: 5px;
+    }
+
+    @media (max-width: 900px) {
+      aside {
+        width: 56px;
+      }
+
+      .logo h1 span.name,
+      .logo span,
+      .nav-item span {
+        display: none;
+      }
+
+      .logo h1 {
+        justify-content: center;
+      }
+
+      .nav-item {
+        justify-content: center;
+        padding: 12px;
+      }
+
+      .nav-item svg {
+        margin: 0;
+      }
+    }
+
+    /* ─── Preset Cards (Agent Modal) ─── */
+    .preset-card {
+      border: 2px solid var(--border);
+      border-radius: var(--r-sm);
+      padding: 12px 14px;
+      cursor: pointer;
+      transition: var(--t);
+      background: var(--bg-main);
+    }
+
+    .preset-card:hover {
+      border-color: var(--brand);
+      background: var(--brand-bg);
+    }
+
+    .preset-card.selected {
+      border-color: var(--brand);
+      background: var(--brand-bg);
+    }
+
+    .preset-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .preset-desc {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      margin-top: 3px;
+    }
+
+    /* ─── Board empty state ─── */
+    .col-empty {
+      text-align: center;
+      padding: 32px 16px;
+      color: var(--text-tertiary);
+      font-size: 13px;
+    }
+
+    .col-empty svg {
+      width: 32px;
+      height: 32px;
+      opacity: 0.3;
+      margin-bottom: 8px;
+    }
+
+    /* ─── Project Kickoff ─── */
+    .kickoff-banner {
+      background: linear-gradient(135deg, var(--brand-bg), var(--bg-card));
+      border: 1px solid var(--brand);
+      border-radius: var(--r-lg);
+      padding: 24px 28px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .kickoff-banner.hidden {
+      display: none;
+    }
+
+    .kickoff-icon {
+      font-size: 36px;
+      flex-shrink: 0;
+    }
+
+    .kickoff-text h3 {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--brand);
+    }
+
+    .kickoff-text p {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    .kickoff-actions {
+      margin-left: auto;
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+
+<body>
+
+  <aside>
+    <div class="logo">
+      <h1><span class="dot"></span><span class="name">Kanban</span></h1>
+      <span>Multi-Agent</span>
+    </div>
+    <nav>
+      <div class="nav-item active" data-tab="board" onclick="go('board')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
+          <rect x="14" y="14" width="7" height="7" rx="1" />
+        </svg>
+        <span>보드</span>
+      </div>
+      <div class="nav-item" data-tab="providers" onclick="go('providers')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+        </svg>
+        <span>AI 프로바이더</span>
+      </div>
+      <div class="nav-item" data-tab="audit" onclick="go('audit')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+        </svg>
+        <span>감사 로그</span>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <span class="srv-dot" id="srvDot"></span><span id="srvLabel">연결 중...</span>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <h2 id="pageTitle">보드</h2>
+      <div class="topbar-right">
+        <span class="orch-badge" id="orchBadge">Running</span>
+        <button class="btn-icon btn" onclick="toggleTheme()" title="테마">
+          <svg id="themeIco" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+        </button>
+        <button class="btn" onclick="load()">새로고침</button>
+        <button class="btn btn-primary" onclick="showAddTask()">+ 작업</button>
+        <button class="btn btn-success" onclick="runOrch()">▶ 1회 실행</button>
+        <button class="btn" id="pauseBtn" onclick="togglePause()">⏸ 일시정지</button>
+      </div>
+    </header>
+
+    <div class="content">
+
+      <!-- Board -->
+      <div class="view active" id="view-board">
+        <!-- Project Kickoff Banner (shown when 0 tasks) -->
+        <div class="kickoff-banner hidden" id="kickoffBanner">
+          <div class="kickoff-icon">🚀</div>
+          <div class="kickoff-text">
+            <h3>새 프로젝트를 시작해볼까요?</h3>
+            <p>프로젝트 설명을 입력하면 PM 에이전트가 작업을 분해하고 보드를 채워드립니다.</p>
+          </div>
+          <div class="kickoff-actions">
+            <button class="btn btn-primary" onclick="openModal('kickoffModal')">📋 프로젝트 시작</button>
+            <button class="btn" onclick="showAddTask()">+ 수동으로 작업 추가</button>
+          </div>
+        </div>
+        <div class="stats" id="statsEl"></div>
+        <div class="board" id="boardEl"></div>
+        <!-- Agent panel -->
+        <div class="agent-section">
+          <div class="section-hd">
+            <h3>에이전트 팀</h3>
+            <button class="btn btn-primary btn-sm" onclick="openAgentModal()">+ 에이전트 추가</button>
+          </div>
+          <div class="agent-grid" id="agentGrid"></div>
+        </div>
+      </div>
+
+      <!-- Providers -->
+      <div class="view" id="view-providers">
+        <div class="page-head">
+          <h2>AI 프로바이더 연동</h2>
+          <p>각 LLM 서비스의 인증 상태를 확인하고 페이지에서 바로 연결합니다.</p>
+        </div>
+        <div class="provider-list" id="provList"></div>
+      </div>
+
+      <!-- Audit -->
+      <div class="view" id="view-audit">
+        <div class="page-head">
+          <h2>시스템 감사 로그</h2>
+          <p>모든 상태 전이와 에이전트 결정이 영구 기록됩니다.</p>
+        </div>
+        <div class="panel">
+          <div class="panel-body" id="auditEl"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Task Modal -->
+  <div class="overlay" id="taskModal" onclick="if(event.target===this)closeModal('taskModal')">
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="taskModalTitle">작업 상세</h3><button class="modal-x" onclick="closeModal('taskModal')">✕</button>
+      </div>
+      <div class="modal-body" id="taskModalBody"></div>
+    </div>
+  </div>
+
+  <!-- Agent CRUD Modal -->
+  <div class="overlay" id="agentModal" onclick="if(event.target===this)closeModal('agentModal')">
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="agentModalTitle">에이전트 추가</h3>
+        <button class="modal-x" onclick="closeModal('agentModal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="agentId">
+        <div class="form-group"><label>에이전트 이름</label><input class="inp" id="agentName"
+            placeholder="예: feature-worker-02"></div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>역할 (Role)</label>
+            <select class="inp" id="agentRole">
+              <option value="worker">Worker (실행)</option>
+              <option value="reviewer">Reviewer (평가)</option>
+              <option value="manager">Manager (결정)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>기본 LLM 모델</label>
+            <select class="inp" id="agentModel">
+              <option value="">팀 서브에이전트 사용</option>
+              <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+              <option value="gpt-4o-mini">GPT-4o Mini</option>
+              <option value="gpt-4o">GPT-4o</option>
+              <option value="codex">Codex CLI</option>
+              <option value="copilot-gpt-4o">GitHub Copilot</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>팀 서브에이전트 구성</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:9px" id="teamPresets">
+            <div class="preset-card"
+              data-val='[{"role":"planner","provider":"gemini"},{"role":"coder","provider":"codex"},{"role":"qa","provider":"openai"}]'
+              onclick="pickPreset(this)">
+              <div class="preset-name">🚀 풀스택 팀</div>
+              <div class="preset-desc">Gemini 기획 → Codex 구현 → GPT QA</div>
+            </div>
+            <div class="preset-card"
+              data-val='[{"role":"researcher","provider":"gemini"},{"role":"writer","provider":"openai"}]'
+              onclick="pickPreset(this)">
+              <div class="preset-name">✍️ 문서/리서치 팀</div>
+              <div class="preset-desc">Gemini 조사 → GPT 문서 작성</div>
+            </div>
+            <div class="preset-card"
+              data-val='[{"role":"coder","provider":"codex"},{"role":"reviewer","provider":"github-copilot"}]'
+              onclick="pickPreset(this)">
+              <div class="preset-name">🔧 코드 리뷰 팀</div>
+              <div class="preset-desc">Codex 구현 → Copilot 코드리뷰</div>
+            </div>
+            <div class="preset-card" data-val='[{"role":"solo","provider":"gemini"}]' onclick="pickPreset(this)">
+              <div class="preset-name">🤖 단독 에이전트</div>
+              <div class="preset-desc">Gemini 하나로 모든 작업 처리</div>
+            </div>
+          </div>
+          <textarea class="inp" id="agentTeam" rows="2" placeholder="위 프리셋 선택 또는 직접 JSON 입력"></textarea>
+          <span style="font-size:11px;color:var(--text-tertiary);margin-top:4px">oh-my-codex agent-team 구조 · 역할별 서브에이전트를
+            provider 기준으로 분할정복</span>
+        </div>
+        <div class="form-group">
+          <label>시스템 프롬프트</label>
+          <textarea class="inp" id="agentPrompt" rows="3" placeholder="이 에이전트의 역할과 목표를 서술합니다."></textarea>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-danger btn-sm" id="agentDeleteBtn" style="display:none;margin-right:auto"
+          onclick="deleteAgent()">삭제</button>
+        <button class="btn" onclick="closeModal('agentModal')">취소</button>
+        <button class="btn btn-primary" onclick="saveAgent()">저장</button>
+      </div>
+    </div>
+  </div>
+  <!-- Kickoff Modal -->
+  <div class="overlay" id="kickoffModal" onclick="if(event.target===this)closeModal('kickoffModal')">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>🚀 새 프로젝트 시작</h3>
+        <button class="modal-x" onclick="closeModal('kickoffModal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div
+          style="background:var(--brand-bg);border-radius:var(--r-sm);padding:14px 16px;margin-bottom:18px;font-size:13px;color:var(--brand);font-weight:600;">
+          PM 에이전트가 설명을 읽고 작업(Task)을 분해하여 Backlog에 자동 등록합니다.
+        </div>
+        <div class="form-group">
+          <label>프로젝트 이름</label>
+          <input class="inp" id="kickoffTitle" placeholder="예: 쇼핑몰 백엔드 API 구축">
+        </div>
+        <div class="form-group">
+          <label>프로젝트 설명 (상세할수록 좋습니다)</label>
+          <textarea class="inp" id="kickoffDesc" rows="6"
+            placeholder="어떤 프로젝트인지, 어떤 기능이 필요한지, 기술 스택, 제약 조건 등을 자유롭게 서술하세요.&#10;&#10;예시:&#10;Node.js + SQLite 기반의 REST API 서버를 구축합니다.&#10;인증(JWT), 상품 CRUD, 주문 관리, 결제 연동(포트원)이 필요합니다.&#10;배포 대상은 Ubuntu 22.04 서버입니다."></textarea>
+        </div>
+        <div class="form-group">
+          <label>작업 분해 기조</label>
+          <select class="inp" id="kickoffPattern">
+            <option value="sprint">스프린트 단위 (1~2주 작업 기준)</option>
+            <option value="feature">기능 단위 (기능별 세분화)</option>
+            <option value="layer">레이어 단위 (DB → API → UI 순)</option>
+            <option value="mvp">MVP 우선 (핵심 기능만 먼저)</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeModal('kickoffModal')">취소</button>
+        <button class="btn btn-primary" onclick="submitKickoff()">🤖 PM에게 넘기기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Task Modal -->
+  <div class="overlay" id="addTaskModal" onclick="if(event.target===this)closeModal('addTaskModal')">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>새 작업 추가</h3><button class="modal-x" onclick="closeModal('addTaskModal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group"><label>제목</label><input class="inp" id="taskTitle" placeholder="작업 제목"></div>
+        <div class="form-group"><label>설명</label><textarea class="inp" id="taskDesc" rows="3"
+            placeholder="상세 내용"></textarea></div>
+        <div class="form-row">
+          <div class="form-group"><label>유형</label>
+            <select class="inp" id="taskType">
+              <option value="feature">Feature</option>
+              <option value="bug">Bug</option>
+              <option value="chore">Chore</option>
+              <option value="research">Research</option>
+            </select>
+          </div>
+          <div class="form-group"><label>긴급도 (1-5)</label><input class="inp" type="number" id="taskUrgency" min="1"
+              max="5" value="3"></div>
+          <div class="form-group"><label>난이도 (1-5)</label><input class="inp" type="number" id="taskEffort" min="1"
+              max="5" value="3"></div>
+        </div>
+        <div class="form-group"><label>통과 기준 (줄 구분)</label><textarea class="inp" id="taskAC" rows="3"
+            placeholder="한 줄에 하나씩 기준을 입력"></textarea></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeModal('addTaskModal')">취소</button>
+        <button class="btn btn-primary" onclick="submitTask()">등록</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = 'http://localhost:4100';
+    const STATUSES = ['Backlog', 'Ready', 'InProgress', 'InReview', 'Blocked', 'Done', 'Archived'];
+
+    /* ─── Theme ─── */
+    function toggleTheme() {
+      const h = document.documentElement;
+      const next = h.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      h.setAttribute('data-theme', next);
+      localStorage.setItem('k-theme', next);
+      const ico = document.getElementById('themeIco');
+      ico.innerHTML = next === 'dark'
+        ? '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'
+        : '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+    }
+    (function init() {
+      const t = localStorage.getItem('k-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', t);
+      if (t === 'dark') { const ico = document.getElementById('themeIco'); ico.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'; }
+    })();
+
+    /* ─── Nav ─── */
+    function go(tab) {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      document.getElementById(`view-${tab}`).classList.add('active');
+      document.querySelector(`.nav-item[data-tab="${tab}"]`).classList.add('active');
+      const titles = { board: '보드', providers: 'AI 프로바이더 연동', audit: '시스템 감사 로그' };
+      document.getElementById('pageTitle').textContent = titles[tab] || '';
+      if (tab === 'providers') loadProviders();
+      if (tab === 'audit') loadAudit();
+    }
+
+    /* ─── API ─── */
+    async function api(path, o = {}) {
+      const r = await fetch(`${API}${path}`, o);
+      return r.json();
+    }
+
+    /* ─── Load all ─── */
+    let _tasks = [], _agents = [], _paused = false;
+    async function load() {
+      try {
+        const [tasks, agents, orchSt, blocked] = await Promise.all([
+          api('/api/tasks'), api('/api/agents'), api('/api/control/orchestrator'), api('/api/blockeds')
+        ]);
+        _tasks = tasks; _agents = agents; _paused = orchSt.orchestratorPaused;
+
+        document.getElementById('srvDot').className = 'srv-dot';
+        document.getElementById('srvLabel').textContent = 'API 연결됨';
+
+        const badge = document.getElementById('orchBadge');
+        badge.className = `orch-badge${_paused ? ' paused' : ''}`;
+        badge.textContent = _paused ? '⏸ 일시정지' : '● Running';
+        document.getElementById('pauseBtn').textContent = _paused ? '▶ 재개' : '⏸ 일시정지';
+
+        renderStats(tasks, blocked);
+        renderBoard(tasks);
+        renderAgents(agents, tasks);
+      } catch {
+        document.getElementById('srvDot').className = 'srv-dot off';
+        document.getElementById('srvLabel').textContent = '끊김';
+      }
+    }
+
+    /* ─── Stats ─── */
+    function renderStats(tasks, blocked) {
+      const total = tasks.length;
+      const done = tasks.filter(t => t.status === 'Done').length;
+      const prog = tasks.filter(t => t.status === 'InProgress').length;
+      const rev = tasks.filter(t => t.status === 'InReview').length;
+      document.getElementById('statsEl').innerHTML = [
+        ['전체 작업', total, 'var(--brand)'],
+        ['진행 중', prog, 'var(--yellow)'],
+        ['리뷰 중', rev, 'var(--orange)'],
+        ['완료', done, 'var(--green)'],
+        ['차단', blocked.length, 'var(--red)'],
+      ].map(([l, v, c]) => `<div class="stat"><div class="stat-label">${l}</div><div class="stat-val" style="color:${c}">${v}</div></div>`).join('');
+    }
+
+    /* ─── Board ─── */
+    function renderBoard(tasks) {
+      if (tasks.length === 0) {
+        document.getElementById('kickoffBanner').classList.remove('hidden');
+      } else {
+        document.getElementById('kickoffBanner').classList.add('hidden');
+      }
+
+      const byS = Object.fromEntries(STATUSES.map(s => [s, []]));
+      tasks.forEach(t => { if (byS[t.status]) byS[t.status].push(t); });
+      document.getElementById('boardEl').innerHTML = STATUSES.map(s => {
+        const cards = byS[s];
+        const sorted = [...cards].sort((a, b) => Number(b.priorityScore || 0) - Number(a.priorityScore || 0));
+        const bodyContent = sorted.length > 0
+          ? sorted.map(t => cardHtml(t)).join('')
+          : `<div class="col-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg><br/>작업 없음</div>`;
+        return `<div class="col" data-s="${s}">
+          <div class="col-head"><span class="col-dot"></span><span class="col-title">${s}</span><span class="col-cnt">${cards.length}</span></div>
+          <div class="col-body">${bodyContent}</div>
+        </div>`;
+      }).join('');
+    }
+
+    function cardHtml(t) {
+      const p = Number(t.priorityScore || 0);
+      const pClass = p >= 20 ? 'p-high' : p >= 10 ? 'p-mid' : 'p-low';
+      const pLabel = p >= 20 ? '긴급' : p >= 10 ? '보통' : '낮음';
+      const reviewTag = t.status === 'InReview' ? `<span class="tag tag-review">리뷰 중</span>` : '';
+      const doneTag = t.status === 'Done' ? `<span class="tag tag-done-r">완료됨</span>` : '';
+      const agentTag = t.assigneeAgentId
+        ? `<span class="tag tag-agent"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a8.38 8.38 0 0 1 13 0"/></svg>${t.assigneeAgentId}</span>` : '';
+      return `<div class="card" onclick="showTask('${t.id}')">
+    <div class="card-top">
+      <span class="card-id">${t.id}</span>
+      <span class="p-badge ${pClass}">${pLabel} P${p.toFixed(0)}</span>
+    </div>
+    <div class="card-title">${escHtml(t.title)}</div>
+    <div class="card-meta">
+      <span class="tag">${t.type}</span>
+      ${agentTag}
+      ${reviewTag}${doneTag}
+      ${t.attemptCount > 0 ? `<span class="tag">${t.attemptCount}/${t.maxAttempt}회</span>` : ''}
+    </div>
+  </div>`;
+    }
+
+    /* ─── Task detail ─── */
+    async function showTask(id) {
+      const [t, arts, revs] = await Promise.all([api(`/api/tasks/${id}`), api(`/api/tasks/${id}/artifacts`), api(`/api/tasks/${id}/reviews`)]);
+      document.getElementById('taskModalTitle').innerHTML = `<span style="color:var(--brand)">${t.id}</span>`;
+      document.getElementById('taskModalBody').innerHTML = `
+    <div style="font-size:19px;font-weight:700;margin-bottom:16px">${escHtml(t.title)}</div>
+    <div class="detail-row"><div class="d-label">상태</div><div class="d-val"><span class="tag">${t.status}</span></div></div>
+    <div class="detail-row"><div class="d-label">담당 에이전트</div><div class="d-val">${t.assigneeAgentId || '미배정'}</div></div>
+    <div class="detail-row"><div class="d-label">우선순위</div><div class="d-val">P${Number(t.priorityScore || 0).toFixed(1)}</div></div>
+    <div class="detail-row"><div class="d-label">시도 횟수</div><div class="d-val">${t.attemptCount}/${t.maxAttempt}</div></div>
+    <div class="detail-row"><div class="d-label">설명</div><div class="d-val" style="background:var(--bg-main);padding:10px;border-radius:var(--r-xs);font-size:13px">${escHtml(t.description || '없음')}</div></div>
+    <div class="detail-row"><div class="d-label">통과 기준</div><div class="d-val">${(t.acceptanceCriteria || []).map(c => `<div style="display:flex;gap:7px;margin-bottom:5px"><span style="color:var(--brand)">✔</span>${escHtml(c)}</div>`).join('') || '-'}</div></div>
+    <div class="detail-row"><div class="d-label">산출물 (${arts.length})</div><div class="d-val">${arts.map(a => `<div>• <strong>${a.kind}</strong> — ${escHtml(a.summary || '')}</div>`).join('') || '없음'}</div></div>
+    <div class="detail-row"><div class="d-label">리뷰 (${revs.length})</div><div class="d-val">${revs.map(r => `<div>• <strong style="color:${r.verdict === 'pass' ? 'var(--green)' : 'var(--red)'}">${r.verdict}</strong> — ${escHtml(r.comments || '')}</div>`).join('') || '없음'}</div></div>
+  `;
+      openModal('taskModal');
+    }
+
+    /* ─── Agents ─── */
+    function renderAgents(agents, tasks) {
+      document.getElementById('agentGrid').innerHTML = agents.map(a => {
+        const myTask = tasks.find(t => t.assigneeAgentId === a.id && ['InProgress', 'InReview'].includes(t.status));
+        const roleClass = `role-${a.role}`;
+        const roleLabel = { worker: 'W', reviewer: 'R', manager: 'M' }[a.role] || '?';
+        const taskInfo = myTask ? `<div class="agent-task">🔧 ${myTask.id}: ${escHtml(myTask.title)}</div>` : `<div class="agent-task" style="color:var(--text-tertiary)">— 대기 중</div>`;
+        return `<div class="agent-card">
+      <div class="agent-head">
+        <div class="agent-avatar ${roleClass}">${roleLabel}</div>
+        <div>
+          <div class="agent-name">${escHtml(a.name)}</div>
+          <div class="agent-role">${a.role}</div>
+        </div>
+      </div>
+      <div class="agent-model">${a.model || '팀 서브에이전트 구성'}</div>
+      ${taskInfo}
+      <div class="agent-actions">
+        <button class="btn btn-sm" onclick="openAgentModal(${JSON.stringify(a).replace(/"/g, '&quot;')})">편집</button>
+      </div>
+    </div>`;
+      }).join('') + `<div class="agent-card" style="border:2px dashed var(--border);background:transparent;align-items:center;justify-content:center;cursor:pointer;display:flex;min-height:180px" onclick="openAgentModal()">
+    <div style="text-align:center;color:var(--text-tertiary)">
+      <div style="font-size:28px;margin-bottom:8px">+</div>
+      <div style="font-size:13px;font-weight:600">에이전트 추가</div>
+    </div>
+  </div>`;
+    }
+
+    /* Agent modal */
+    function openAgentModal(agent = null) {
+      document.getElementById('agentId').value = agent?.id || '';
+      document.getElementById('agentName').value = agent?.name || '';
+      document.getElementById('agentRole').value = agent?.role || 'worker';
+      document.getElementById('agentModel').value = agent?.model || '';
+      document.getElementById('agentTeam').value = agent?.tool_scope || '';
+      document.getElementById('agentPrompt').value = agent?.prompt || '';
+      document.getElementById('agentModalTitle').textContent = agent ? `에이전트 편집: ${agent.name}` : '에이전트 추가';
+      document.getElementById('agentDeleteBtn').style.display = agent ? 'inline-flex' : 'none';
+      openModal('agentModal');
+    }
+
+    async function saveAgent() {
+      const id = document.getElementById('agentId').value;
+      const body = {
+        name: document.getElementById('agentName').value,
+        role: document.getElementById('agentRole').value,
+        model: document.getElementById('agentModel').value || null,
+        toolScope: document.getElementById('agentTeam').value || null,
+        prompt: document.getElementById('agentPrompt').value || null,
+        isActive: true
+      };
+      if (!body.name) return alert('이름을 입력하세요.');
+      if (id) await api(`/api/agents/${id}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      else await api('/api/agents', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      closeModal('agentModal');
+      load();
+    }
+
+    async function deleteAgent() {
+      const id = document.getElementById('agentId').value;
+      if (!id || !confirm(`에이전트 ${id}를 삭제하시겠습니까?`)) return;
+      await api(`/api/agents/${id}`, { method: 'DELETE' });
+      closeModal('agentModal');
+      load();
+    }
+
+    /* ─── Team Presets ─── */
+    function pickPreset(el) {
+      document.querySelectorAll('.preset-card').forEach(c => c.classList.remove('selected'));
+      el.classList.add('selected');
+      const val = el.getAttribute('data-val');
+      document.getElementById('agentTeam').value = JSON.stringify(JSON.parse(val), null, 2);
+    }
+
+    /* ─── Project Kickoff ─── */
+    async function submitKickoff() {
+      const title = document.getElementById('kickoffTitle').value.trim();
+      const desc = document.getElementById('kickoffDesc').value.trim();
+      const pattern = document.getElementById('kickoffPattern').value;
+      if (!title || !desc) return alert('프로젝트 이름과 설명을 모두 입력해주세요.');
+
+      const fullDesc = `[새 프로젝트 킥오프]\n이름: ${title}\n분해 기조: ${pattern}\n상세 설명:\n${desc}`;
+
+      try {
+        await api('/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: `[프로젝트 셋업] ${title}`,
+            description: fullDesc,
+            type: 'feature',
+            status: 'Backlog',
+            assigneeAgentId: 'pm-01',
+            priorityScore: 30
+          })
+        });
+        closeModal('kickoffModal');
+        alert('프로젝트가 접수되었습니다. PM 에이전트가 작업을 분해합니다.');
+        load();
+        runOrch(); // 킥오프 후 즉시 실행
+      } catch (err) {
+        alert('프로젝트 접수 중 오류: ' + err.message);
+      }
+    }
+
+    /* ─── Providers ─── */
+    const PROV_META = {
+      'openai': { icon: 'AI', name: 'OpenAI', desc: 'GPT-4o / GPT-4o Mini', type: 'apikey', color: '#10a37f' },
+      'gemini': { icon: 'G', name: 'Gemini (API Key)', desc: 'Gemini 2.0 Flash · API Key 방식', type: 'apikey', color: '#4285f4' },
+      'gemini-oauth': { icon: 'G★', name: 'Gemini (Google OAuth)', desc: 'gcloud CLI 기반 Google 계정 연결', type: 'oauth', color: '#34a853' },
+      'codex': { icon: 'CX', name: 'OpenAI Codex CLI', desc: 'codex auth login 기반 OAuth', type: 'oauth', color: '#ff8a3d' },
+      'github-copilot': { icon: 'GH', name: 'GitHub Copilot', desc: 'gh auth login 기반 OAuth', type: 'oauth', color: '#24292e' },
+    };
+
+    async function loadProviders() {
+      const statuses = await api('/api/providers');
+      const map = Object.fromEntries(statuses.map(s => [s.provider, s]));
+      document.getElementById('provList').innerHTML = Object.entries(PROV_META).map(([key, meta]) => {
+        const st = map[key] || { configured: false, authMethod: 'none' };
+        const authHtml = meta.type === 'apikey'
+          ? `<div class="prov-body">
+          <div class="row">
+            <input class="inp" type="password" id="inp-${key}" placeholder="${meta.name} API 키 입력">
+            <button class="btn btn-primary" style="white-space:nowrap" onclick="saveApiKey('${key}')">저장</button>
+          </div>
+          <div class="prov-test-row">
+            <button class="btn btn-sm" onclick="testProv('${key}')">연결 테스트</button>
+          </div>
+        </div>`
+          : `<div class="prov-body">
+          ${meta.type === 'oauth' ? `
+          <div class="prov-note">OAuth 인증이 필요합니다. 버튼을 클릭하면 시스템에서 인증 프로세스를 시작합니다.</div>
+          <div class="prov-test-row">
+            <button class="btn btn-primary" onclick="startOAuth('${key}')">🔑 ${meta.name} 인증 시작</button>
+            <button class="btn btn-sm" onclick="testProv('${key}')">상태 확인</button>
+          </div>` : ''}
+        </div>`;
+        return `<div class="prov-item">
+      <div class="prov-head">
+        <div class="prov-icon" style="color:${meta.color}">${meta.icon}</div>
+        <div class="prov-info">
+          <div class="prov-name">${meta.name}</div>
+          <div class="prov-desc">${meta.desc}</div>
+        </div>
+        <span class="prov-badge ${st.configured ? 'ok' : 'no'}">${st.configured ? '✓ 연결됨' : '미연결'}</span>
+      </div>
+      ${authHtml}
+    </div>`;
+      }).join('');
+    }
+
+    async function saveApiKey(provider) {
+      const val = document.getElementById(`inp-${provider}`).value.trim();
+      if (!val) return alert('API 키를 입력해주세요.');
+      await api('/api/secrets', {
         method: 'POST',
-        headers: { 'content-type':'application/json' },
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ provider, keyName: 'api-key', value: val })
+      });
+      document.getElementById(`inp-${provider}`).value = '';
+      await loadProviders();
+      alert('✅ 저장 완료! 연결 테스트를 진행해 보세요.');
+    }
+
+    async function startOAuth(name) {
+      const r = await api(`/api/providers/${name}/auth-login`, { method: 'POST' });
+      alert(r.started ? `✅ ${r.reason}` : `❌ ${r.reason}`);
+      setTimeout(() => loadProviders(), 3000);
+    }
+
+    async function testProv(name) {
+      const r = await api(`/api/providers/${name}/test`, { method: 'POST' });
+      alert(`[${name.toUpperCase()}] ${r.connected ? '✅ 연결 성공' : '❌ 실패'}\n${r.reason}`);
+      loadProviders();
+    }
+
+    /* ─── Audit ─── */
+    async function loadAudit() {
+      const logs = await api('/api/audit?limit=50');
+      document.getElementById('auditEl').innerHTML = logs.map(a => `
+    <div class="audit-item">
+      <div class="audit-line"></div>
+      <div style="flex:1">
+        <div class="audit-action">${a.action} <span style="font-weight:400;color:var(--text-tertiary);font-size:13px">[${a.entity}]</span></div>
+        <div class="audit-meta"><strong style="color:var(--brand)">${a.actor_agent_id || 'System'}</strong> → ${a.entity_id}</div>
+        ${a.reason ? `<div class="audit-reason">사유: ${escHtml(a.reason)}</div>` : ''}
+        <div class="audit-time">${formatTime(a.created_at)}</div>
+      </div>
+    </div>
+  `).join('') || '<div style="color:var(--text-tertiary)">로그 없음</div>';
+    }
+
+    /* ─── Add Task ─── */
+    function showAddTask() { openModal('addTaskModal'); }
+    async function submitTask() {
+      const ac = (document.getElementById('taskAC').value || '').split('\n').map(s => s.trim()).filter(Boolean);
+      await api('/api/tasks', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          title: '샘플 작업',
-          description: '요건 기반 샘플',
-          type: 'feature',
-          priorityModel: 4,
-          urgency: 4,
-          riskReduction: 4,
-          effort: 2,
-          acceptanceCriteria: ['요구사항 문서 반영'],
-          definitionOfDone: ['검증 가능한 결과물 산출'],
-          dependencies: []
+          title: document.getElementById('taskTitle').value || '새 작업',
+          description: document.getElementById('taskDesc').value,
+          type: document.getElementById('taskType').value,
+          urgency: Number(document.getElementById('taskUrgency').value),
+          effort: Number(document.getElementById('taskEffort').value),
+          priorityModel: 3, riskReduction: 3,
+          acceptanceCriteria: ac
         })
       });
-      await load();
+      closeModal('addTaskModal');
+      load();
     }
 
-    async function runOrchestrator() {
-      await api('/api/orchestrator/run', { method: 'POST' });
-      await load();
-    }
+    /* ─── Orch ─── */
+    async function runOrch() { await api('/api/orchestrator/run', { method: 'POST' }); load(); }
+    async function togglePause() { await api(`/api/control/orchestrator/${_paused ? 'resume' : 'pause'}`, { method: 'POST' }); load(); }
 
-    setInterval(load, 10000);
+    /* ─── Helpers ─── */
+    function openModal(id) { document.getElementById(id).classList.add('show'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+    function escHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+    function formatTime(iso) { try { return new Date(iso).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }); } catch { return iso; } }
+
+    setInterval(load, 8000);
     load();
   </script>
 </body>
+
 </html>
