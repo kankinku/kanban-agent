@@ -1,0 +1,19 @@
+
+======================================
+  Kanban Agent Launcher
+  Node.js: v22.21.0
+  서버:    C:\Users\hanji\Desktop\새 폴더 (2)\kanban-agent\dist\server
+======================================
+
+[scheduler] Auto-cycle enabled: every 60s
+Kanban SSOT server running on http://localhost:4100
+
+[AI] === 프로바이더 연결 상태 ===
+[AI] ✗ openai
+[AI] ✗ gemini
+[AI] ✗ gemini-oauth
+[AI] ✗ codex
+[AI] ✗ github-copilot
+[AI] ================================
+
+[browser] Opening http://localhost:4100 ...

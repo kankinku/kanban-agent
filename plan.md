@@ -83,19 +83,65 @@
   - [x] 리뷰 실패/변경 후 Backlog or Ready 복귀 정책(관리자 force 전환 지원)
   - [x] 수동 승인/중단 토글(추후 UI 전환 버튼 연동)
 - [ ] 감사 가능성/재현성
-  - [ ] 작업 산출물 path 및 checksum 저장
-  - [ ] 결정 이력 및 리뷰 이력 조회 API
+  - [x] 작업 산출물 path 및 checksum 저장(addArtifact sha256 자동 계산)
+  - [x] 결정 이력 및 리뷰 이력 조회 API (`GET /api/decisions`, `GET /api/reviews` 추가)
 
 ### Phase 5. 통합 검증 및 런칭 준비
 - [x] e2e 시나리오 준비
   - [x] Task 생성/조회/상태 전이 API 검증
-  - [ ] Blocked/Archived/Retry 경로 검증
+  - [x] Blocked/Archived/Retry 경로 검증 (docs/e2e-checklist.md 시나리오 2~3 완성)
   - [x] Worker 수행→Reviewer 리뷰→Manager 결정 완전 자동 경로 실제 통합 검증
-- [ ] 성능/안정성 체크
-  - [ ] 동시성, 큐 지연, 이벤트 누락 대응
-- [ ] 배포/운영 가이드 작성
-  - [ ] 로컬 단일 머신 배치(요구사항 1.2)
-  - [ ] 최초 실행/재시작/장애 대응 방법
+- [x] 성능/안정성 체크
+  - [x] 동시성, 큐 지연, 이벤트 누락 대응 (orchestrator _cycleRunning 플래그, lock TTL)
+- [x] 배포/운영 가이드 작성
+  - [x] 로컬 단일 머신 배치(요구사항 1.2) → docs/operations.md
+  - [x] 최초 실행/재시작/장애 대응 방법 → docs/operations.md 섹션 4, 7
+
+### Phase 6. 실제 AI 파이프라인 연결 및 핵심 결함 수정
+> **배경:** Phase 5까지 인프라(DB/API/상태머신/보안/대시보드)는 완성. 하지만 Worker/Reviewer/Manager Runtime이 스텁이며 Provider Hub와 전혀 연결되지 않아 실제 AI가 한 번도 호출되지 않는 상태. 이 단계에서 실제 멀티에이전트 동작을 구현한다.
+
+#### [P0-CRITICAL] 실제 AI 실행 파이프라인 연결
+- [x] 6.1 orchestrator.js 비동기 전환 및 callProvider() 연결
+  - [x] `runCycle()` / `_runCycleImpl()` → async 함수로 전환
+  - [x] 에이전트 DB에서 모델명 조회 → 프로바이더 자동 매핑 (gpt→openai, gemini→gemini, codex→codex, copilot→github-copilot)
+  - [x] Worker step: `callProvider(providerName, {prompt, systemPrompt})` 실제 호출 (프로바이더 미설정 시 스텁 fallback)
+  - [x] Reviewer step: 워커 결과를 컨텍스트로 `callProvider` 호출 → verdict 파싱
+  - [x] Manager step: 리뷰 결과를 컨텍스트로 `callProvider` 호출 → Done/Blocked 결정 파싱
+- [x] 6.2 Worker 실패 시 Blocked 자동 rollback
+  - [x] `workerOut.ok === false` 시 `updateTaskStatus → Blocked` 처리
+  - [x] 오류 이유 audit log 기록
+
+#### [P1-MAJOR] API 및 서버 수정
+- [x] 6.3 server.js에서 `await runCycle()` 처리 (async 전환 반영)
+- [x] 6.4 index.js에 자동 스케줄러 추가
+  - [x] `KANBAN_CYCLE_INTERVAL_MS` env 변수 (기본 30초)
+  - [x] pause 상태 시 스킵, 이미 실행 중 시 스킵
+
+#### [P1-MAJOR] 대시보드 UX 수정
+- [x] 6.5 addTaskModal에 `definitionOfDone` textarea 추가
+  - [x] `submitTask()`에서 `definitionOfDone` 필드 POST body에 포함
+  - [x] AC/DoD 비어있을 시 alert 및 제출 차단
+- [x] 6.6 kickoffModal `submitKickoff()` 수정
+  - [x] 킥오프 태스크에 기본 `acceptanceCriteria` + `definitionOfDone` 자동 세팅
+  - [x] Backlog 등록 후 API로 즉시 Ready 승격
+- [x] 6.7 task 상세 모달에 상태별 액션 버튼 추가
+  - [x] Backlog 태스크: "Ready로 승격" 버튼
+  - [x] Blocked 태스크: "Ready로 재시도 / Backlog로 / 보관" 버튼
+  - [x] `promoteTask(id, toStatus)` 헬퍼 함수 추가
+
+#### [P2-QUALITY] WIP 계산 버그 수정
+- [x] 6.8 `getTaskCountInProgress` agentId 필터 제거
+  - [x] 전체 InProgress/InReview 태스크 수 기준으로 WIP 제한 계산
+
+#### [P2-QUALITY] PM 에이전트 태스크 분해 로직
+- [x] 6.9 pm-01 Kickoff 태스크 자동 분해 처리
+  - [x] orchestrator가 `assigneeAgentId === 'pm-01'` 또는 `[프로젝트 셋업]` 제목 태스크를 특별 처리
+  - [x] callProvider로 PM 에이전트에게 프로젝트 설명 전달 → 하위 태스크 목록 수신 (fallback: 기본 3개 자동 생성)
+  - [x] 하위 태스크 자동 `createTask` + Backlog 등록
+- [x] 6.10 `upsertDefaultAgents` INSERT OR IGNORE 수정
+  - [x] 기존 에이전트가 있어도 pm-01 포함 모든 기본 에이전트 항상 확보
+- [x] 6.11 artifact kind 제약 조건 준수
+  - [x] PM artifact kind를 'pm_decomposition' → 'report'로 수정 (SQLite CHECK constraint 준수)
 
 ---
 

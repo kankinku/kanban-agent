@@ -36,18 +36,43 @@
 - 산출물: `server/src/orchestrator.js`, `runtime/*-runtime.js`, `server/src/providers/*.js`
 
 ## T-SEC-130: Secret/보안/운영 안전
-- 상태: In Progress
+- 상태: Done
 - 범위:
   - Secret 암복호화 저장소 + 마스킹
   - lock/attempt/중복 작업 방지 정책
   - retry 토글/수동 중단 정책(운영용 API) 적용
-- 산출물: `server/src/lib/security.js`, `server/src/services/secretService.js`, `server/src/services/kanbanService.js`
+  - Orchestrator 동시 실행 차단(`_cycleRunning` 플래그)
+- 산출물: `server/src/lib/security.js`, `server/src/services/secretService.js`, `server/src/services/kanbanService.js`, `server/src/orchestrator.js`
 
 ## T-E2E-140: 통합 검증
-- 상태: In Progress
+- 상태: Done
 - 범위:
-  - e2e 체크리스트 정리
+  - e2e 체크리스트 정리 및 전체 시나리오 확대
   - 핵심 플로우(생성/전이/오케스트레이터) 검증 기록
-- 산출물: `docs/e2e-checklist.md`
+  - Blocked/Archived/Retry 경로 e2e 시나리오 완성
+  - Lock/Secret/결정이력 API 시나리오 추가
+- 산출물: `docs/e2e-checklist.md` (7개 시나리오)
 
-- 추가: Blocked/Archived/Retry 경로 e2e 시나리오 실행 필요
+## T-OPS-150: 배포/운영 가이드
+- 상태: Done
+- 범위:
+  - 로컬 단일 머신 배치 가이드
+  - 환경 변수, DB 관리, 재시작/장애 대응
+  - API 전체 요약표
+- 산출물: `docs/operations.md`
+
+## T-CHKSUM-160: Artifact Checksum 자동화
+- 상태: Done
+- 범위:
+  - `addArtifact` sha256 자동 계산 로직 구현
+  - worker-runtime에서 checksum 포함 산출물 생성
+  - orchestrator에서 checksum 전달 연결
+- 산출물: `server/src/services/kanbanService.js`, `runtime/worker/worker-runtime.js`, `server/src/orchestrator.js`
+
+## T-API-History-170: 전체 결정/리뷰 이력 API
+- 상태: Done
+- 범위:
+  - `GET /api/decisions` 전체 결정 이력 엔드포인트
+  - `GET /api/reviews` 전체 리뷰 이력 엔드포인트
+  - `listAllReviewReports` 서비스 함수
+- 산출물: `server/src/api/server.js`, `server/src/services/kanbanService.js`

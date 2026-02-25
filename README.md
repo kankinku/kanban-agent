@@ -25,6 +25,8 @@ npm run serve-web      # dashboard(http://localhost:4173)
 - `GET /api/tasks/{id}/reviews`
 - `GET /api/tasks/{id}/decisions`
 - `GET /api/agents`, `GET /api/blockeds`, `GET /api/audit`
+- `GET /api/decisions` (전체 결정 이력, `?limit=N`)
+- `GET /api/reviews` (전체 리뷰 이력, `?limit=N`)
 - `POST /api/tasks`
 - `POST /api/tasks/{id}/status`
 - `POST /api/tasks/{id}/artifacts`
@@ -44,9 +46,13 @@ npm run serve-web      # dashboard(http://localhost:4173)
 - **Runtime**: Worker/Reviewer/Manager 스텁 런타임 + Orchestrator 라우팅(초기)
 - **Provider Hub**: OpenAI/Gemini/Codex 스텁 커넥터
 - **Security**: Secret store AES-256-GCM, 민감정보 마스킹 API
+- **Artifact Checksum**: Worker 산출물에 sha256 자동 계산·저장
+- **동시성 보호**: Orchestrator `_cycleRunning` 플래그, Task Lock TTL
+
+## 산출물 문서
+- [e2e 검증 체크리스트](docs/e2e-checklist.md)
+- [운영 가이드](docs/operations.md)
 
 ## 진행 중/남은 항목
-- 실제 Worker/Reviewer/Manager 검증 로직 고도화
+- 실제 Worker/Reviewer/Manager 검증 로직 고도화 (Provider 실 연동)
 - Antigravity 플러그인(옵션) 통합
-- 수동 중단 스위치 / 재시도 정책 정교화
-- Blocked/Archived/Retry e2e 통합 완료
