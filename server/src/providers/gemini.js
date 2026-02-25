@@ -44,8 +44,7 @@ export function getGeminiStatus() {
 }
 
 // ── Gemini Google OAuth (gcloud) ──────────────────────────────────────────────
-function checkGcloudAuth() {
-  try {
+function checkGcloudAuth() {  if (!findBin('gcloud')) return { authenticated: false, output: 'gcloud CLI 미설치' };  try {
     const r = spawnSync('gcloud', ['auth', 'print-access-token'], { encoding: 'utf8', timeout: 8000 });
     return { authenticated: r.status === 0 && !!(r.stdout || '').trim(), output: (r.stdout + r.stderr).trim() };
   } catch (e) { return { authenticated: false, output: e.message }; }
@@ -55,6 +54,7 @@ export function startGeminiOAuth() {
   if (!findBin('gcloud')) return { started: false, reason: 'gcloud CLI 미설치. https://cloud.google.com/sdk 참조' };
   try {
     const proc = spawn('gcloud', ['auth', 'login'], { detached: true, stdio: 'ignore' });
+    proc.on('error', (e) => console.warn('[gcloud] spawn 오류 (무시됨):', e.message));
     proc.unref();
     return { started: true, reason: 'gcloud auth login 시작됨. 브라우저에서 Google 계정 인증을 완료해 주세요.' };
   } catch (e) { return { started: false, reason: e.message }; }

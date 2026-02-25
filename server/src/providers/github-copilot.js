@@ -7,6 +7,7 @@ function findGhBin() {
 }
 
 function checkGhAuthStatus() {
+    if (!findGhBin()) return { authenticated: false, output: 'gh CLI 미설치' };
     try {
         const result = spawnSync('gh', ['auth', 'status'], { encoding: 'utf8', timeout: 10000 });
         const output = (result.stdout + result.stderr).trim();
@@ -64,6 +65,7 @@ export function startGhAuthLogin() {
         const proc = spawn('gh', ['auth', 'login', '--web'], {
             detached: true, stdio: 'ignore'
         });
+        proc.on('error', (e) => console.warn('[gh] spawn 오류 (무시됨):', e.message));
         proc.unref();
         return { started: true, reason: 'gh auth login --web 프로세스 시작됨. 브라우저에서 인증을 완료해 주세요.' };
     } catch (err) {

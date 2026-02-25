@@ -143,6 +143,121 @@
 - [x] 6.11 artifact kind 제약 조건 준수
   - [x] PM artifact kind를 'pm_decomposition' → 'report'로 수정 (SQLite CHECK constraint 준수)
 
+### Phase 7. 사전 환경 점검 및 자동 설치 시스템 (Pre-flight)
+
+> **배경:** Phase 6까지 AI 파이프라인이 완성됐지만, 실행 환경(CLI 도구)이 갖춰지지 않으면 `spawn ENOENT` 등으로 즉시 크래시. 현재는 `index.js` 최상단에 인라인으로 CLI 체크/설치 로직이 삽입돼 있으나, 구조적으로 분리되지 않고 단일 파일에 뭉쳐 있음. 이 단계에서 **독립 pre-flight 모듈**로 전환하고, 체크 범위를 CLI 외 전체 런타임 의존성으로 확장한다.
+
+---
+
+#### 현재 시스템 구조 파악
+
+**진입점 및 흐름**
+```
+dist/kanban-agent.exe (pkg CJS launcher)
+  └─ PATH에서 node.exe 탐색
+  └─ spawn node dist/server/src/index.js
+        ├─ [인라인 CLI 체크/설치 — index.js 7~90줄]
+        ├─ import './api/server.js'        ← Express REST API (port 4100)
+        ├─ import providers/index.js       ← Provider Hub (openai/gemini/codex/gh-copilot)
+        ├─ import orchestrator.js          ← runCycle() async 스케줄러
+        └─ setTimeout → AI 상태 출력 + 브라우저 열기
+```
+
+**현재 CLI 체크의 위치 및 문제점**
+
+| 항목 | 현재 상태 | 문제 |
+|---|---|---|
+| 위치 | `server/src/index.js` 최상단 (7~90줄 인라인) | 서버 진입점에 설치 로직이 뭉쳐 있어 유지보수 어려움 |
+| 체크 범위 | `gh`, `gcloud`, `codex` 3개 CLI만 | Node.js 버전, npm global, `.env` 환경변수 미체크 |
+| 설치 실패 처리 | `console.error` 후 서버 계속 기동 | 필수 도구 실패 시에도 서버가 정상 기동처럼 보임 |
+| 재시도 없음 | PATH 갱신 후 재탐색 1회만 | winget PATH 지연(수십 초)으로 설치 직후 인식 실패 가능 |
+| 비동기 없음 | 전체 `execSync` 동기 블로킹 | 설치 중 서버 응답 불가 — UX 열악 |
+
+**Provider → CLI 의존성 매핑**
+
+```
+providers/codex.js          → codex  CLI  (npm install -g @openai/codex)
+providers/github-copilot.js → gh     CLI  (winget / brew)
+providers/gemini.js         → gcloud CLI  (Google Cloud SDK)
+providers/openai.js         → 없음  (API key only)
+```
+
+**현재 spawn에러 처리 상태**  
+- `codex.js` `startCodexLogin()`: `.on('error')` 핸들러 추가됨 ✓  
+- `github-copilot.js` `startGhAuthLogin()`: `.on('error')` 핸들러 추가됨 ✓  
+- `gemini.js` `startGeminiOAuth()`: `.on('error')` 핸들러 추가됨 ✓  
+- `checkCodexAuth()` 내 `spawnSync('codex', ...)`: 미설치 시 ENOENT throw 가능 — **미수정**  
+
+---
+
+#### 개선 목표
+
+1. **`server/src/lib/preflight.js` 독립 모듈 신설** — index.js에서 `await preflight()` 한 줄로 호출
+2. **체크 범위 확장** — CLI 3종 + Node.js 버전 + npm global 설치 상태 + 필수 env 변수
+3. **단계별 심각도 분류** — `fatal`(미해결 시 서버 종료) / `warn`(경고만) / `info`
+4. **재시도 로직** — Windows PATH 갱신 후 최대 3회 재탐색 (1초 간격)
+5. **비동기 설치** — `execAsync`로 전환, 설치 중 progress 출력
+6. **`spawnSync` ENOENT 완전 제거** — 모든 provider의 `spawnSync` 호출을 `findBin` 선체크 후 실행
+
+---
+
+#### 구현 계획 (체크리스트)
+
+##### 7.1 `server/src/lib/preflight.js` 신설
+- [x] `checkNode()` — Node.js ≥ 18 강제 (미충족 시 fatal)
+- [x] `checkCli(name, installCmd)` — where/which → 미설치 시 `execAsync` 설치 → PATH 갱신 후 재탐색(최대 3회)
+- [x] `checkNpmGlobal(pkg)` — `npm list -g --depth=0` 파싱 (codex 전용)
+- [x] `checkEnv(key, severity)` — `process.env[key]` 존재 여부 (OPENAI_API_KEY 등)
+- [x] `runPreflight()` — 전체 점검 순서 정의 + 결과 요약 출력 + fatal 존재 시 `process.exit(1)`
+
+```
+[preflight] Node.js v22.21.0 ✓
+[preflight] gh     ✓
+[preflight] gcloud ✗ → 자동 설치 중...  (winget)
+[preflight] gcloud 설치 완료 ✓
+[preflight] codex  ✗ → 자동 설치 중...  (npm install -g @openai/codex)
+[preflight] codex  설치 완료 ✓
+[preflight] OPENAI_API_KEY ✗ (warn) — openai 프로바이더 비활성
+[preflight] ─────────────────── 완료 (fatal:0 / warn:1) ───────────────────
+```
+
+##### 7.2 `server/src/index.js` 정리
+- [x] 인라인 CLI 체크/설치 블록(7~90줄) 제거
+- [x] 최상단에 `import { runPreflight } from './lib/preflight.js'` 추가
+- [x] `await runPreflight()` 를 나머지 임포트 전에 실행 (top-level await)
+
+##### 7.3 Provider `spawnSync` ENOENT 완전 제거
+- [x] `codex.js` `checkCodexAuth()` — `findBin('codex')` null 시 조기 반환 추가
+- [x] `gemini.js` `checkGcloudAuth()` — `findBin('gcloud')` null 시 조기 반환 추가
+- [x] `github-copilot.js` `checkGhAuthStatus()` — `findGhBin()` null 시 조기 반환 추가
+
+##### 7.4 `dist/` 재빌드 및 검증
+- [ ] `node build.js` 실행 — preflight.js 포함 dist 재생성
+- [ ] `dist/kanban-agent.exe` 실행 후 CLI 미설치 환경에서 자동 설치 + 정상 기동 확인
+
+---
+
+#### 실행 순서 (최종 기동 흐름)
+
+```
+kanban-agent.exe
+  └─ launcher.cjs: node.exe 탐색
+  └─ node dist/server/src/index.js
+        ├─ await runPreflight()          ← 신규: 환경 점검 + 자동 설치
+        │     ├─ Node.js 버전 체크
+        │     ├─ gh / gcloud / codex CLI 체크 → 미설치 시 자동 설치
+        │     ├─ 필수 env 변수 경고
+        │     └─ fatal 있으면 process.exit(1)
+        ├─ import './api/server.js'      ← 서버 기동 (preflight 통과 후에만 진입)
+        ├─ import providers/index.js
+        ├─ import orchestrator.js
+        └─ setTimeout → AI 상태 + 브라우저 열기
+```
+
+---
+
+- [x] 7.0 현재 시스템 구조 파악 및 계획 수립
+
 ---
 
 ## 4) omx 작업 실행 제안 (문서 기반 실행)

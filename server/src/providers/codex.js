@@ -6,6 +6,7 @@ function findBin(cmd) {
 }
 
 function checkCodexAuth() {
+  if (!findBin('codex')) return { authenticated: false, output: 'codex CLI 미설치' };
   try {
     const r = spawnSync('codex', ['auth', 'status'], { encoding: 'utf8', timeout: 8000 });
     const out = (r.stdout + r.stderr).trim();
@@ -26,6 +27,7 @@ export function startCodexLogin() {
   if (!findBin('codex')) return { started: false, reason: 'Codex CLI 미설치. npm install -g @openai/codex' };
   try {
     const proc = spawn('codex', ['auth', 'login'], { detached: true, stdio: 'ignore' });
+    proc.on('error', (e) => console.warn('[codex] spawn 오류 (무시됨):', e.message));
     proc.unref();
     return { started: true, reason: 'codex auth login 시작됨. 브라우저 또는 터미널에서 인증을 완료해 주세요.' };
   } catch (e) { return { started: false, reason: e.message }; }

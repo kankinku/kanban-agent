@@ -1,10 +1,14 @@
 import { exec } from 'node:child_process';
-
-import './api/server.js';
+import { runPreflight } from './lib/preflight.js';
 import { runCycle } from './orchestrator.js';
 import { isOrchestratorPaused } from './control.js';
 import { getAllProviderStatus } from './providers/index.js';
+import './api/server.js';
 
+// ─── 사전 환경 점검 + 자동 설치 ──────────────────────────────────────────────
+await runPreflight();
+
+// ─── (아래는 preflight 통과 후 실행) ─────────────────────────────────────────
 const PORT = Number(process.env.PORT || 4100);
 
 // ─── AI 프로바이더 상태 확인 ───────────────────────────────────────────────
