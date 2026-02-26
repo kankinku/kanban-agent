@@ -345,12 +345,13 @@ Get-Process node | Where-Object { $_.CommandLine -like "*index.js*" } | Stop-Pro
 |---|---|---|
 | `openai` | API Key | `OPENAI_API_KEY` 환경변수 또는 Secret Store |
 | `gemini` | API Key | `GEMINI_API_KEY` 환경변수 또는 Secret Store |
-| `gemini-oauth` | Google OAuth | `gcloud auth login` (CLI 자동 설치 후 최초 1회 실행) |
-| `codex` | OAuth CLI | `codex auth login` (CLI 자동 설치 후 최초 1회 실행) |
-| `github-copilot` | gh CLI | `gh auth login` (CLI 자동 설치 후 최초 1회 실행) |
+| `gemini-oauth` | Google OAuth | `gemini auth login` 우선 시도, 없으면 `gcloud auth login` |
+| `google-antigravity` | Google OAuth (Legacy Alias) | 내부적으로 Gemini OAuth 연결 로직 사용 |
+| `codex` | OAuth CLI | `codex login` (CLI 자동 설치 후 최초 1회 실행) |
+| `github-copilot` | GitHub Device Flow OAuth | 브라우저 로그인 + Device Code 승인 (gh CLI 없이도 가능) |
 
-> `gh`, `gcloud`, `codex` CLI는 **서버 시작 시 미설치 감지 → 자동 설치**됩니다.
-> 설치 후 OAuth 로그인은 최초 1회 수동으로 실행해야 합니다.
+> `gcloud`, `codex` CLI는 **서버 시작 시 미설치 감지 → 자동 설치**됩니다.
+> `github-copilot`은 Device Flow로 동작해 `gh` CLI 없이도 인증 가능합니다.
 
 ---
 

@@ -38,7 +38,11 @@ let _cycleRunning = false;
 function resolveProvider(model) {
   if (!model) return null;
   const m = model.toLowerCase();
+  if (m.startsWith('codex/')) return 'codex';
+  if (m.startsWith('copilot/')) return 'github-copilot';
   if (m.startsWith('gpt') || m.includes('openai')) return 'openai';
+  if (m.includes('antigravity')) return 'google-antigravity';
+  if (m.includes('gemini-cli') || m.includes('google-gemini-cli')) return 'google-gemini-cli';
   if (m.startsWith('gemini')) return 'gemini';
   if (m === 'codex') return 'codex';
   if (m.includes('copilot') || m.includes('github')) return 'github-copilot';

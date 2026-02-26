@@ -26,7 +26,29 @@ export function getDatabase(dbPath = process.env.KANBAN_DB_PATH || DEFAULT_DB_PA
 
   const schemaSql = readFileSync(schemaPath, 'utf-8');
   db.exec(schemaSql);
+
+  // Run migrations safely
+  runMigrations(db);
+
   return db;
+}
+
+function runMigrations(db) {
+  const columns = db.prepare("PRAGMA table_info(tasks)").all();
+  const hasBoardId = columns.some(c => c.name === 'board_id');
+  if (!hasBoardId) {
+    console.log('[DB] Migrating: Adding board_id column to tasks table...');
+    try {
+      db.prepare("ALTER TABLE tasks ADD COLUMN board_id TEXT REFERENCES boards(id)").run();
+      // 기존 태스크를 위해 기본 보드 강제 생성 및 매핑
+      const defaultBoardId = 'board-default';
+      db.prepare(`INSERT OR IGNORE INTO boards (id, name, created_at, updated_at) VALUES ('${defaultBoardId}', '기본 프로젝트 (Migrated)', datetime('now'), datetime('now'))`).run();
+      db.prepare(`UPDATE tasks SET board_id = '${defaultBoardId}' WHERE board_id IS NULL`).run();
+      console.log('[DB] Migration successful.');
+    } catch (e) {
+      console.error('[DB] Migration failed:', e);
+    }
+  }
 }
 
 export function parseJsonArray(raw, fallback = []) {

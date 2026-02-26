@@ -16,14 +16,72 @@ function normalizeActor(actorId) {
   return existing ? actorId : defaultActor;
 }
 
-export function listTasks() {
+export function listBoards() {
+  return db.prepare('SELECT * FROM boards ORDER BY created_at ASC').all();
+}
+
+export function getBoard(id) {
+  return db.prepare('SELECT * FROM boards WHERE id = ?').get(id) || null;
+}
+
+export function createBoard(name) {
+  const id = `board-${randomUUID()}`;
+  const now = nowIso();
+  db.prepare(`INSERT INTO boards (id, name, created_at, updated_at) VALUES (@id, @name, @createdAt, @updatedAt)`).run({
+    id, name: name || '새 프로젝트', createdAt: now, updatedAt: now
+  });
+  return getBoard(id);
+}
+
+export function updateBoard(id, name) {
+  const now = nowIso();
+  db.prepare('UPDATE boards SET name = ?, updated_at = ? WHERE id = ?').run(name, now, id);
+  return getBoard(id);
+}
+
+export function deleteBoard(id) {
+  const tx = db.transaction(() => {
+    const tasks = db.prepare('SELECT id FROM tasks WHERE board_id = ?').all(id);
+    for (const t of tasks) {
+      db.prepare('DELETE FROM artifacts WHERE task_id = ?').run(t.id);
+      const reports = db.prepare('SELECT id FROM review_reports WHERE task_id = ?').all(t.id);
+      for (const r of reports) {
+        db.prepare('DELETE FROM review_issues WHERE review_report_id = ?').run(r.id);
+      }
+      db.prepare('DELETE FROM review_reports WHERE task_id = ?').run(t.id);
+      db.prepare('DELETE FROM decisions WHERE task_id = ?').run(t.id);
+    }
+    db.prepare('DELETE FROM tasks WHERE board_id = ?').run(id);
+    db.prepare('DELETE FROM boards WHERE id = ?').run(id);
+  });
+
+  tx();
+  return { deleted: id };
+}
+
+export function ensureDefaultBoard() {
+  const defaultBoard = db.prepare('SELECT * FROM boards ORDER BY created_at ASC LIMIT 1').get();
+  if (!defaultBoard) {
+    return createBoard('기본 프로젝트');
+  }
+  return defaultBoard;
+}
+
+export function listTasks(boardId = null) {
+  if (boardId) {
+    const rows = db.prepare('SELECT * FROM tasks WHERE board_id = ? ORDER BY updated_at DESC').all(boardId);
+    return rows.map(mapTask);
+  }
   const rows = db.prepare('SELECT * FROM tasks ORDER BY updated_at DESC').all();
   return rows.map(mapTask);
 }
 
-export function listTasksByStatus(statuses = []) {
-  if (!Array.isArray(statuses) || statuses.length === 0) return listTasks();
+export function listTasksByStatus(statuses = [], boardId = null) {
+  if (!Array.isArray(statuses) || statuses.length === 0) return listTasks(boardId);
   const placeholders = statuses.map(() => '?').join(',');
+  if (boardId) {
+    return db.prepare(`SELECT * FROM tasks WHERE status IN (${placeholders}) AND board_id = ? ORDER BY priority_score DESC, updated_at ASC`).all(...statuses, boardId).map(mapTask);
+  }
   return db.prepare(`SELECT * FROM tasks WHERE status IN (${placeholders}) ORDER BY priority_score DESC, updated_at ASC`).all(...statuses).map(mapTask);
 }
 
@@ -92,22 +150,22 @@ export function upsertDefaultAgents() {
   const now = nowIso();
   const stmt = db.prepare(`INSERT OR IGNORE INTO agents (id, name, role, model, prompt, is_active, created_at, updated_at) VALUES (@id,@name,@role,@model,@prompt,@isActive,@createdAt,@updatedAt)`);
   stmt.run({
-    id: 'pm-01', name: '프로젝트 매니저', role: 'manager', model: 'gemini-2.0-flash',
+    id: 'pm-01', name: '프로젝트 매니저', role: 'manager', model: 'codex/gpt-5.2',
     prompt: '프로젝트 설명을 읽고 실행 가능한 작업(Task)으로 분해하여 Backlog에 등록합니다. 각 작업은 명확한 통과 기준(Acceptance Criteria)을 포함해야 합니다.',
     isActive: 1, createdAt: now, updatedAt: now
   });
   stmt.run({
-    id: 'worker-01', name: 'Feature Worker', role: 'worker', model: 'codex',
+    id: 'worker-01', name: 'Feature Worker', role: 'worker', model: 'codex/gpt-5.2',
     prompt: '할당된 개발 작업을 구현하고 산출물(코드, 문서)을 제출합니다.',
     isActive: 1, createdAt: now, updatedAt: now
   });
   stmt.run({
-    id: 'reviewer-01', name: 'Code Reviewer', role: 'reviewer', model: 'gemini-2.0-flash',
+    id: 'reviewer-01', name: 'Code Reviewer', role: 'reviewer', model: 'codex/gpt-5.2',
     prompt: '제출된 산출물을 검토하고 통과 기준 충족 여부를 판단합니다.',
     isActive: 1, createdAt: now, updatedAt: now
   });
   stmt.run({
-    id: 'manager-01', name: 'Decision Manager', role: 'manager', model: 'gpt-4o-mini',
+    id: 'manager-01', name: 'Decision Manager', role: 'manager', model: 'codex/gpt-5.2',
     prompt: '리뷰 결과를 바탕으로 작업을 완료 처리하거나 재작업을 지시합니다.',
     isActive: 1, createdAt: now, updatedAt: now
   });
@@ -119,8 +177,15 @@ export function createTask(input) {
   const now = nowIso();
   const status = input.status || 'Backlog';
 
+  let bId = input.boardId;
+  if (!bId) {
+    const defaultBoard = ensureDefaultBoard();
+    bId = defaultBoard.id;
+  }
+
   const payload = {
     id,
+    boardId: bId,
     title: input.title || 'Untitled task',
     description: input.description || '',
     status,
@@ -155,10 +220,10 @@ export function createTask(input) {
   };
 
   const stmt = db.prepare(`INSERT INTO tasks (
-    id,title,description,status,tags,type,priority_model,urgency,risk_reduction,effort,priority_score,mandatory,due_date,
+    id,board_id,title,description,status,tags,type,priority_model,urgency,risk_reduction,effort,priority_score,mandatory,due_date,
     acceptance_criteria,definition_of_done,dependencies,parent_id,child_ids,assignee_agent_id,reviewer_agent_id,lock_id,lock_expires_at,
     attempt_count,max_attempt,version,created_at,updated_at,started_at,submitted_at,completed_at,cycle_time_ms,lead_time_ms
-  ) VALUES (@id,@title,@description,@status,@tags,@type,@priorityModel,@urgency,@riskReduction,@effort,@priorityScore,@mandatory,@dueDate,
+  ) VALUES (@id,@boardId,@title,@description,@status,@tags,@type,@priorityModel,@urgency,@riskReduction,@effort,@priorityScore,@mandatory,@dueDate,
     @acceptanceCriteria,@definitionOfDone,@dependencies,@parentId,@childIds,@assigneeAgentId,@reviewerAgentId,@lockId,@lockExpiresAt,
     @attemptCount,@maxAttempt,@version,@createdAt,@updatedAt,@startedAt,@submittedAt,@completedAt,@cycleTimeMs,@leadTimeMs)`);
 
@@ -416,6 +481,7 @@ function getReviewReport(id) {
 function mapTask(row) {
   return {
     id: row.id,
+    boardId: row.board_id,
     title: row.title,
     description: row.description,
     status: row.status,

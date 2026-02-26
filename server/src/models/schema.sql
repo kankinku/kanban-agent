@@ -1,5 +1,12 @@
 -- SQLite schema for Kanban SSOT core entities
 
+CREATE TABLE IF NOT EXISTS boards (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS agents (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -14,6 +21,7 @@ CREATE TABLE IF NOT EXISTS agents (
 
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY,
+  board_id TEXT NOT NULL,
   title TEXT NOT NULL,
   description TEXT NOT NULL,
   status TEXT NOT NULL CHECK(status IN ('Backlog','Ready','InProgress','InReview','Blocked','Done','Archived')),
@@ -45,6 +53,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   completed_at TEXT,
   cycle_time_ms INTEGER,
   lead_time_ms INTEGER,
+  FOREIGN KEY (board_id) REFERENCES boards(id),
   FOREIGN KEY (assignee_agent_id) REFERENCES agents(id),
   FOREIGN KEY (reviewer_agent_id) REFERENCES agents(id),
   FOREIGN KEY (parent_id) REFERENCES tasks(id)

@@ -17,7 +17,8 @@ import {
   listArtifacts, addArtifact, addReviewReport, listReviewReports, listAllReviewReports,
   listAuditEvents, listDecisionEvents, listBlockedTasks,
   listAgents, getAgent, createAgent, updateAgent, deleteAgent,
-  upsertDefaultAgents, acquireTaskLock, releaseTaskLock, setTaskAssignee
+  upsertDefaultAgents, acquireTaskLock, releaseTaskLock, setTaskAssignee,
+  listBoards, getBoard, createBoard, updateBoard, deleteBoard, ensureDefaultBoard
 } from '../services/kanbanService.js';
 import { runCycle } from '../orchestrator.js';
 import { isOrchestratorPaused, setOrchestratorPaused, orchestratorStatus } from '../control.js';
@@ -84,12 +85,30 @@ const server = createServer(async (req, res) => {
     return sendJson(res, 200, { ok: true, version: 'v0.3.0' });
   }
 
+  // ─── Boards ─────────────────────────────────────────────────────────
+  let m;
+  if (method === 'GET' && path === '/api/boards') return sendJson(res, 200, listBoards());
+  if (method === 'POST' && path === '/api/boards') {
+    const b = await parseJson(req); return sendJson(res, 201, createBoard(b.name));
+  }
+  if ((m = matchPath(path, '/api/boards/{id}'))) {
+    const board = getBoard(m.id);
+    if (!board && method !== 'DELETE') return sendJson(res, 404, { ok: false, error: 'board not found' });
+    if (method === 'GET') return sendJson(res, 200, board);
+    if (method === 'PUT' || method === 'PATCH') {
+      const b = await parseJson(req); return sendJson(res, 200, updateBoard(m.id, b.name));
+    }
+    if (method === 'DELETE') { deleteBoard(m.id); return sendJson(res, 200, { ok: true, deleted: m.id }); }
+  }
+
   // ─── Tasks ───────────────────────────────────────────────────────────
-  if (method === 'GET' && path === '/api/tasks') return sendJson(res, 200, listTasks());
+  if (method === 'GET' && path === '/api/tasks') {
+    const boardId = url.searchParams.get('boardId');
+    return sendJson(res, 200, listTasks(boardId));
+  }
   if (method === 'POST' && path === '/api/tasks') {
     const b = await parseJson(req); return sendJson(res, 201, createTask(b));
   }
-  let m;
   if ((m = matchPath(path, '/api/tasks/{id}'))) {
     const t = getTask(m.id);
     if (!t) return sendJson(res, 404, { ok: false, error: 'not found' });
@@ -170,7 +189,7 @@ const server = createServer(async (req, res) => {
     return sendJson(res, 200, await testProvider(m.name));
   }
   if ((m = matchPath(path, '/api/providers/{name}/auth-login')) && method === 'POST') {
-    return sendJson(res, 200, triggerOAuthLogin(m.name));
+    return sendJson(res, 200, await triggerOAuthLogin(m.name));
   }
 
   // ─── Secrets ─────────────────────────────────────────────────────────
@@ -189,6 +208,7 @@ const server = createServer(async (req, res) => {
 
 function killPortAndListen(retried = false) {
   server.listen(PORT, () => {
+    ensureDefaultBoard();
     upsertDefaultAgents();
     console.log(`Kanban SSOT server running on http://localhost:${PORT}`);
   });
@@ -208,6 +228,7 @@ server.on('error', (err) => {
           server.removeAllListeners('error');
           server.on('error', (e) => { console.error('[server] fatal:', e.message); process.exit(1); });
           server.listen(PORT, () => {
+            ensureDefaultBoard();
             upsertDefaultAgents();
             console.log(`Kanban SSOT server running on http://localhost:${PORT}`);
           });
